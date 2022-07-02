@@ -1,320 +1,128 @@
 # -ARL-method
 solve GAP by ARL method in GAMS
-********************************************************
-************** BD  *************************************
-********************************************************
-
+*************** sets ***************
 Sets
-I /i1*i20/
-J /j1*j100/
-alias (i,ip)
-;
+I /i1*i3/
+J /j1*j5/
 
-*********** Data
+**************  parameters  ********
+
 Parameters
-B
-cap(i)
-c(i)
-dem(j)
-w(j)
-dis(i,j)
-r
+
+w(i,j)
+t(i)
 ;
 
-B        = 1000;
-cap(i)   = uniform(100,200);
-c(i)     = uniform(100,200);
-dem(j)   = uniform(20,50);
-w(j)     = uniform(0,1);
-dis(i,j) = uniform(5,50);
-r        = 15;
-
-Parameter
-dis_check
-;
-
-dis_check(i,j)=0;
-dis_check(i,j)$(dis(i,j)/r<1)=1;
-
+w(i,j) = uniform(0,1);
+t(i)=uniform(1,1.7);
 Display
-
-
-B
-cap
-c
-dem
 w
-dis
-r
-
-********************************************************************************
-* Step 0: Initialization of BD**************************************************
-
-Set iter /1*20/
-
-Parameters
-MaxRE   /1E-3/
-LB
-UB
+t
+*************  Variables  **********
+Binary Variable
+x(i,j)
 ;
-LB=0.0000001;
-UB=inf;
 
-********************************************************************************
-
-********************************************************************************
-* Step 1: Subproblem (SP) of BD*************************************************
-
-Free variables
-Z_SP    ;
-
-Positive variable
-y(i,j) ;
-
-Parameter
-x_fix(i) ;
-
+Free Variable
+Z_ARL
+;
+*************  model  **************
 Equations
-obj_SP       'obective function of SP'
-Cons1_SP      'Constraints of SP'
-Cons2_SP
-Cons3_SP
-Cons4_SP
+obj
+cons1
+
 ;
 
-obj_SP..         Z_SP =e= sum({i,j},w(j)*y(i,j));
+Scalars
+mio
+Landa;
 
-Cons1_SP       ..  sum({i},c(i)*x_fix(i)) =l= B ;
+obj.. Z_ARL =e= sum({i,j},w(i,j)*x(i,j)) +sum({j},(mio/2)*power(sum({i},x(i,j)-1),2))+ sum({j},Landa*(sum({i},x(i,j))-1));
 
+cons1(i)..  sum({j},w(i,j)*x(i,j)) =l= t(i);
 
-Cons2_SP(i)    ..  sum({j},y(i,j)) =l= cap(i)*x_fix(i);
+*********
 
-
-Cons3_SP(i,j)  ..  y(i,j) =l= dem(j)*dis_check(i,j);
-
-
-Cons4_SP(j)    ..  sum({i},y(i,j)) =l= dem(j);
- 
-
-
-Model SP
+Model GAP_ALR
 /
-obj_SP
-Cons1_SP
-Cons2_SP
-Cons3_SP
-Cons4_SP
+obj
+cons1
 /
 ;
-
-********************************************************************************
-********************************************************************************
-********************************************************************************
-* Step 2: Dual Subproblem (DSP) of BD*******************************************
-
-Free variables
-Z_DSP    ;
-
-Positive variables
-alfa(i)
-beta(j)
-gama(i,j) ;
-
-
-Equations
-obj_DSP       'obective function of DSP'
-Cons_DSP      'Constraints of DSP'
-;
-
-obj_DSP..         Z_DSP =e=  sum({i},cap(i)*x_fix(i)*alfa(i))+sum({j},dem(j)*beta(j))+sum((i,j),dem(j)*gama(i,j));
-
-Cons_DSP(i,j)..   alfa(i) + beta(j) + gama(i,j )=g= w(j);
-
-Model DSP
-/
-obj_DSP
-Cons_DSP
-/
-;
-********************************************************************************
-********************************************************************************
-********************************************************************************
-* Step 3: Homogeneous/Modified Dual Subproblem (MDSP) of BD*********************
-
-Free variables
-Z_MDSP    ;
-
-Equations
-obj_MDSP       'obective function of MDSP'
-Cons_MDSP      'Constraints of MDSP'
-Bounded_Cons1
-Bounded_Cons2
-Bounded_Cons3
-;
-
-obj_MDSP..         Z_MDSP =e=  sum({i},cap(i)*x_fix(i)*alfa(i))+sum({j},dem(j)*beta(j))+sum((i,j),dem(j)*gama(i,j));
-Cons_MDSP(i,j)..     alfa(i) + beta(j) + gama(i,j) =g= 0 ;
-Bounded_Cons1..    sum(i,alfa(i)) =g= card(i);
-Bounded_Cons2..    sum(j,beta(j)) =g= card(j);
-Bounded_Cons3..    sum((i,j),gama(i,j)) =g= card(i)+card(j);
-Model MDSP
-/
-obj_MDSP
-Cons_MDSP
-Bounded_Cons1
-Bounded_Cons2
-Bounded_Cons3
-/
-;
-********************************************************************************
-********************************************************************************
-********************************************************************************
-* Step 4: Relaxed Master Problem (RMP) of BD************************************
-
-Free variables
-Z_RMP    ;
-
-Binary variable
-x(i)
-;
-
-Positive Variable Say;
-
-Sets
-OC(iter)
-FC(iter)
-;
-
-OC(iter)= NO;
-FC(iter)= NO;
-
-Parameters
-alfa_fix(i,iter)
-beta_fix(j,iter)
-gama_fix(i,j,iter)
-;
-
-
-
-Equations
-obj_RMP       'obective function of MP'
-
-
-OptimalityCut(iter)
-FeasibilityCut(iter)
-
-;
-
-obj_RMP..                Z_RMP =e= Say;
-
-
-OptimalityCut(OC)..      Say  =l= sum({i},cap(i)*x(i)*alfa_fix(i,oc))+sum({j},dem(j)*beta_fix(j,oc))+sum((i,j),dem(j)*gama_fix(i,j,oc));
-
-FeasibilityCut(FC) ..   sum({i},cap(i)*x(i)*alfa_fix(i,fc))+sum({j},dem(j)*beta_fix(j,fc))+sum((i,j),dem(j)*gama_fix(i,j,fc)) =g= 0;
-
-
-Model RMP
-/
-obj_RMP
-
-OptimalityCut
-FeasibilityCut
-/
-;
-********************************************************************************
-* Step 5: Main Loop for implentation of BD**************************************
-
-
-Parameters
-Result(iter,*)
-Converged /NO/
-Iteration
-Gap
-x_Feasibility
-;
-
-x_fix(i)=0;
 
 Options
-LP  =  CPLEX
-MIP = CPLEX
-OPTCR = 0
-RESLIM = 300
+RESLIM=100
+OPTCR=0
+QCP=CPLEX
 ;
+************** Setting
 
-Loop(iter$(NOT(Converged)),
-***** Solve DSP or MDSP to find u and update LB
-Solve DSP us LP Min Z_DSP;
+Set iter /1*100/
 
-*Infeasibility of Main OP
-Abort$(DSP.ModelStat = 2) "Your OP Model is not fasible"
+Parameters
+MRE /0.01/
+RE
+Phi /0.0001/
+Landa /0/
+mio / 0/
+Result(iter,*)
+FC 'feasibility checker'
+convergency
+UB /10000/
+LB /0.0001/
+;
+convergency = NO;
+**************
 
-* Bounded Situtation
-if( DSP.ModelStat <> 3,
 
-x_Feasibility = YES;
-OC(iter)=YES;
-LB= Z_DSP.l;
-Result(iter,'LB')=LB;
+LOOP(iter$(NOT(convergency)),
+
+Solve  GAP_ALR us MIQCP max Z_ARL;
+
+Result(iter,'L') = Landa;
+Result(iter,'M') = mio;
+LB=Z_ARL.l;
+Result(iter,'LB = Z_ARL(L)') = Z_ARL.l;
+
+** FC and LB
+IF(sum({j},Landa*(sum({i},x.l(i,j))-1)),
+
+FC=NO;
 
 ELSE
-* Unbounded Situtation
-x_Feasibility = NO;
-FC(iter)=YES;
-Solve MDSP us LP Min Z_MDSP;
-
-)
-* end of If
-;
-
-Result(iter,'Feasible')=x_Feasibility;
-alfa_fix(i,iter)=alfa.l(i);
-beta_fix(j,iter)=beta.l(j);
-gama_fix(i,j,iter)=gama.l(i,j);
-************************************************
-*************** Solve RMP to  fine new y and y and update UB
-
-Solve RMP us MIP Max Z_RMP ;
-
-Abort$(RMP.ModelStat = 2) "Your OP Model is not fasible" ;
-
-UB=Z_RMP.l;
-Result(iter,'UB')=UB;
-
-x_fix(i)=x.l(i);
-******************************************
-
-
-* Stop Criteria
-
-Gap = abs((UB - LB)/ LB );
-
-Result(iter,'Gap')=Gap;
-
-IF(Gap <= MaxRE,
-Converged = YES;
+FC=YES;
+UB = sum({i,j},w(i,j)*x.l(i,j)) ;
 )
 ;
+**
 
-Iteration=ord(iter);
-Display
-"-----------Iteration-----------"
-Iteration
-x_Feasibility
-LB
-UB
-Gap
-"-----------Varable-------------"
-"x"
-x_fix
-"y"
-*Cons_DSP.i,j
+Result(iter,'FC') = FC;
+Result(iter,'LB') = LB;
+
+RE = (UB - LB)/LB;
+
+Result(iter,'RE') = RE;
+
+*
+
+IF( RE <= MRE ,
+convergency = YES;
+);
+
+
+** update L
+
+Landa = max { 0 , Landa  + Phi*(UB-LB)*(sum({j},Landa*(sum({i},x.l(i,j))-1))/abs(sum({j},Landa*(sum({i},x.l(i,j))-1))))}
+
 
 )
+*End of Loop
 ;
-*End of BD Main Loop
-
 
 Display
 Result
+;
 
+
+
+Execute_Unload 'ALR_IP401'
